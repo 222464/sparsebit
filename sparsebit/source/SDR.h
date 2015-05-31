@@ -5,6 +5,6 @@
 struct SDR
 {
 	int _width;
-	int _height;
+	int	_height;
 	std::vector<float> _states;
 };

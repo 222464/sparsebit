@@ -17,7 +17,11 @@ private:
 	struct Node
 	{
 		std::vector<Connection> _connections;
+		std::vector<Connection> _recurrentConnections;
+
 		float _numInhibitionConnections;
+		float _numRecurrentConnections;
+
 		float _inhibitionBias;
 		// before inhibition
 		float _activation;
@@ -43,11 +47,11 @@ public:
 		float connectionRadius, float inhibitionRadius, float inhibitionThreshold,
 		std::mt19937 &generator);
 
-	SDR generateSDR(const std::vector<float> inputs);
+	SDR generateSDR(const std::vector<float> inputs, bool recurrentConnections = false);
 
 	std::vector<float> reconstruct(const SDR &sdr);
 
-	void learn(const std::vector<float> &inputs, const SDR &sdr, float weightLearnRate, float inhibitionLearnRate);
+	void learn(const std::vector<float> &inputs, const SDR &sdr, float weightLearnRate, float inhibitionLearnRate, float recurrentLearnRate = 0.0f);
 
 	float getState(int index) const
 	{

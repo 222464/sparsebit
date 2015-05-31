@@ -51,6 +51,19 @@ void SDRT::create(int inputWidth, int inputHeight, int width, int height,
 				else if (std::sqrt(static_cast<float>(std::pow(inputX - ox, 2) + std::pow(inputY - oy, 2))) <= connectionRadius)
 					_nodes[i]._numInhibitionConnections++;
 
+		for (int ox = x - connectionRadius; ox <= x + connectionRadius; ox++)
+			for (int oy = y - connectionRadius; oy <= y + connectionRadius; oy++)
+				if (ox >= 0 && ox < width && oy >= 0 && oy < height)
+				{
+					if (std::sqrt(static_cast<float>(std::pow(x - ox, 2) + std::pow(y - oy, 2))) <= connectionRadius)
+					{
+						_nodes[i]._recurrentConnections.push_back(Connection{ ox + oy * width, dist01(generator) });
+						_nodes[i]._numRecurrentConnections++;
+					}
+				}
+				else if (std::sqrt(static_cast<float>(std::pow(x - ox, 2) + std::pow(y - oy, 2))) <= connectionRadius)
+					_nodes[i]._numRecurrentConnections++;
+
 		_nodes[i]._connections.shrink_to_fit();
 	}
 }
@@ -66,14 +79,18 @@ SDR SDRT::generateSDR(const std::vector<float> inputs)
 		for (int j = 0; j < _nodes[i]._connections.size(); j++)
 			sum += std::pow(inputs[_nodes[i]._connections[j]._inputIndex] - _nodes[i]._connections[j]._weight, 2);
 
+		if (recurrentConnections)
+			for (int j = 0; j < _nodes[i]._recurrentConnections.size(); j++)
+				sum += std::pow(_nodes[_nodes[i]._recurrentConnections[j]._inputIndex]._state - _nodes[i]._recurrentConnections[j]._weight, 2);
+
 		_nodes[i]._activation = -sum + _nodes[i]._inhibitionBias;
 	}
-
+	
 	for (int i = 0; i < _nodes.size(); i++)
 	{
 		int nodeX = i % _width;
 		int nodeY = i / _width;
-
+		
 		float inhibitionCounter = 0;
 
 		for (int ox = nodeX - _inhibitionRadius; ox <= nodeX + _inhibitionRadius; ox++)
@@ -85,7 +102,7 @@ SDR SDRT::generateSDR(const std::vector<float> inputs)
 							inhibitionCounter++;
 				}
 				else if (std::sqrt(static_cast<float>(std::pow(ox - nodeX, 2) + std::pow(oy - nodeY, 2))) <= _inhibitionRadius)
-					inhibitionCounter += _inhibitionThreshold / _nodes[i]._numInhibitionConnections;
+					inhibitionCounter += _inhibitionThreshold / (_nodes[i]._numInhibitionConnections + _nodes[i]._numRecurrentConnections);
 
 		if (inhibitionCounter < _inhibitionThreshold)
 			_nodes[i]._state = 1.0f;
@@ -124,10 +141,11 @@ std::vector<float> SDRT::reconstruct(const SDR &sdr)
 	return data;
 }
 
-void SDRT::learn(const std::vector<float> &inputs, const SDR &sdr, float weightLearnRate, float inhibitionLearnRate)
+void SDRT::learn(const std::vector<float> &inputs, const SDR &sdr, float weightLearnRate, float inhibitionLearnRate, float recurrentLearnRate)
 {
 	std::vector<float> inputRecon = reconstruct(sdr);
 	std::vector<float> errors(_inputWidth * _inputHeight);
+	std::vector<float> recurrentErrors(_width * _height);
 	float totalError = 0.0f;
 
 	for (int i = 0; i < inputs.size(); i++) 
@@ -140,11 +158,23 @@ void SDRT::learn(const std::vector<float> &inputs, const SDR &sdr, float weightL
 
 	for (int i = 0; i < _nodes.size(); i++)
 	{
-		_nodes[i]._inhibitionBias += (_nodes[i]._state - _inhibitionThreshold / _nodes[i]._numInhibitionConnections) * inhibitionLearnRate;
+		float errorSum = 0.0f;
+		for (int j = 0; j < _nodes[i]._connections.size(); j++)
+			errorSum += std::pow(inputs[_nodes[i]._connections[j]._inputIndex] - _nodes[i]._connections[j]._weight, 2);
+	}
 
+	for (int i = 0; i < _nodes.size(); i++)
+	{
 		for (int j = 0; j < _nodes[i]._connections.size(); j++)
 		{
 			_nodes[i]._connections[j]._weight += _nodes[i]._state * errors[_nodes[i]._connections[j]._inputIndex] * weightLearnRate;
+		}
+
+		_nodes[i]._inhibitionBias += (_nodes[i]._state - _inhibitionThreshold / _nodes[i]._numInhibitionConnections) * inhibitionLearnRate;
+
+		for (int j = 0; j < _nodes[i]._recurrentConnections.size(); j++)
+		{
+			_nodes[i]._recurrentConnections[j]._weight += _nodes[i]._state * recurrentErrors[_nodes[i]._recurrentConnections[j]._inputIndex] * recurrentLearnRate;
 		}
 	}
 }

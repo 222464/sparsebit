@@ -4,8 +4,11 @@
 #include <unordered_map>
 #include <iomanip>
 
-#include "SDR.h"
-#include "SDRT.h"
+#include <SFML/Window.hpp>
+#include <SFML/Graphics.hpp>
+
+#include "nlp/WTSDR.h"
+#include "vis/PrettySDR.h"
 
 void print(std::wstring &str)
 {
@@ -51,54 +54,6 @@ void printSDR(const SDR &sdr)
 	output += L"\n";
 
 	print(output);
-}
-
-SDR learnString(SDRT &sdrt, int inputWidth, int inputHeight, const std::string &str) {
-	std::vector<float> inputs(inputWidth * inputHeight);
-	std::unordered_map<char, float> inputMap;
-
-	std::cout << "Input string:" << std::endl;
-	std::cout << "\"" << str << "\"" << std::endl;
-
-	float inputMapCounter = 0.0f;
-
-	for (int i = 0; i < str.length(); i++)
-	{
-		if (inputMap.find(str[i]) == inputMap.end())
-		{
-			inputMap.emplace(str[i], inputMapCounter);
-			inputMapCounter++;
-		}
-	}
-
-	for (int i = 0; i < str.size(); i++)
-	{
-		inputs[i] = inputMap.at(str[i]);
-	}
-
-	SDR sdr = sdrt.generateSDR(inputs);
-
-	printSDR(sdr);
-
-	std::cout << "Learning..." << std::endl;
-
-	for (int i = 0; i < 100; i++)
-	{
-		sdrt.learn(inputs, sdr, 0.05f, 0.5f);
-		sdr = sdrt.generateSDR(inputs);
-	}
-
-	std::cout << "Reconstruction:" << std::endl;
-	std::vector<float> recon = sdrt.reconstruct(sdr);
-	std::string reconStr = "";
-	for (int i = 0; i < str.length(); i++)
-	{
-		reconStr += recon[i] > 0.5f ? " " : "#";
-	}
-
-	std::cout << reconStr << std::endl;
-
-	return sdr;
 }
 
 void learnString(SDRT &sdrt, SDR &sdr, int inputWidth, int inputHeight, const std::string &str) {
@@ -147,22 +102,74 @@ void learnString(SDRT &sdrt, SDR &sdr, int inputWidth, int inputHeight, const st
 
 int main()
 {
+	// config
+	int inputHeight = 4;
+	int inputWidth = 4;
+	int width = 10;
+	int height = 10;
+	float connectionRadius = 3.0f;
+	float inhibitionRadius = 4.0f;
+	float inhibitionThreshold = 4.0f;
+
 	std::mt19937 generator;
 	generator.seed(time(nullptr));
 
-	SDRT sdrt;
-	sdrt.create(4, 4, 10, 10, 3.0f, 4.0f, 4.0f, generator);
+	nlp::WTSDR wtsdr;
+	wtsdr.create(inputWidth, inputHeight, width, height, connectionRadius, inhibitionRadius, inhibitionThreshold, generator);
 
-	SDR sdr = learnString(sdrt, 4, 4, "# ## #### #");
+	SDR sdr;
 
-	learnString(sdrt, sdr, 4, 4, "##### ##### #");
+	vis::PrettySDR sdrRenderer;
+	sdrRenderer.create(width, height);
 
-	learnString(sdrt, sdr, 4, 4, "# # # # # #");
+	sf::RenderWindow window(sf::VideoMode(800, 600), "SDR Testing");
 
-	learnString(sdrt, sdr, 4, 4, "# # ### ### #");
+	float timeStep = 1.0f / 60.0f * 1000.0f;
+	float timePassed = 0.0f;
+	float deltaTime = 0.0f;
 
-	learnString(sdrt, sdr, 4, 4, "#### # # #");
+	int maxTicks = 6;
+	int ticks = 0;
 
-	std::getchar();
+	sf::Clock clock;
+	clock.restart();
+
+	while (window.isOpen())
+	{
+		window.clear();
+		sdrRenderer.draw(window, sf::Vector2f(10.0f, 10.0f));
+		window.display();
+
+		timePassed = 0.0f;
+		ticks = 0;
+
+		deltaTime = clock.getElapsedTime().asMilliseconds();
+		clock.restart();
+
+		while (timePassed < timeStep && ticks < maxTicks)
+		{
+			sf::Event event;
+			while (window.pollEvent(event))
+			{
+				// "close requested" event: we close the window
+				if (event.type == sf::Event::Closed)
+					window.close();
+			}
+
+			// update here
+			for (int i = 0; i < sdr._height; i++)
+			{
+				for (int j = 0; j < sdr._width; j++)
+				{
+					sdrRenderer[j + i * sdr._width] = sdr._states[j + i * sdr._width];
+				}
+			}
+
+			timePassed += deltaTime;
+
+			ticks++;
+		}
+	}
+
 	return 0;
 }
