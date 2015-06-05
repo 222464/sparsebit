@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <random>
+#include <algorithm>
 
 #include "SDR.h"
 
@@ -12,16 +13,14 @@ private:
 	{
 		int _inputIndex;
 		float _weight;
+		float _fallOff;
+		bool _selfConnection;
 	};
 
 	struct Node
 	{
 		std::vector<Connection> _connections;
-		std::vector<Connection> _recurrentConnections;
-
-		float _numInhibitionConnections;
-		float _numRecurrentConnections;
-
+		std::vector<Connection> _inhibitionConnections;
 		float _inhibitionBias;
 		// before inhibition
 		float _activation;
@@ -37,21 +36,20 @@ private:
 
 	float _connectionRadius;
 	float _inhibitionRadius;
-	
-	float _inhibitionThreshold;
 
 	std::vector<Node> _nodes;
 
 public:
 	void create(int inputWidth, int inputHeight, int width, int height,
-		float connectionRadius, float inhibitionRadius, float inhibitionThreshold,
-		std::mt19937 &generator);
+		float connectionRadius, float inhibitionRadius,
+		std::mt19937 &generator, bool predict = false);
 
-	SDR generateSDR(const std::vector<float> inputs, bool recurrentConnections = false);
+	SDR generateSDR(const std::vector<float> inputs);
 
 	std::vector<float> reconstruct(const SDR &sdr);
+	std::vector<float> SDRT::reconstructPrediction(const SDR &sdr);
 
-	void learn(const std::vector<float> &inputs, const SDR &sdr, float weightLearnRate, float inhibitionLearnRate, float recurrentLearnRate = 0.0f);
+	void learn(const std::vector<float> &inputs, const SDR &sdr, float weightLearnRate, float inhibitionLearnRate, float inhibitionBiasLearnRate, float sparsity);
 
 	float getState(int index) const
 	{

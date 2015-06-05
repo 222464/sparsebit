@@ -56,73 +56,108 @@ void printSDR(const SDR &sdr)
 	print(output);
 }
 
-void learnString(SDRT &sdrt, SDR &sdr, int inputWidth, int inputHeight, const std::string &str) {
-	std::vector<float> inputs(inputWidth * inputHeight);
-	std::unordered_map<char, float> inputMap;
-
-	std::cout << "Input string:" << std::endl;
-	std::cout << "\"" << str << "\"" << std::endl;
-
-	float inputMapCounter = 0.0f;
-
-	for (int i = 0; i < str.length(); i++)
-	{
-		if (inputMap.find(str[i]) == inputMap.end())
-		{
-			inputMap.emplace(str[i], inputMapCounter);
-			inputMapCounter++;
-		}
-	}
-
-	for (int i = 0; i < str.size(); i++)
-	{
-		inputs[i] = inputMap.at(str[i]);
-	}
-
-	printSDR(sdr);
-
-	std::cout << "Learning..." << std::endl;
-
-	for (int i = 0; i < 100; i++)
-	{
-		sdrt.learn(inputs, sdr, 0.05f, 0.5f);
-		sdr = sdrt.generateSDR(inputs);
-	}
-
-	std::cout << "Reconstruction:" << std::endl;
-	std::vector<float> recon = sdrt.reconstruct(sdr);
-	std::string reconStr = "";
-	for (int i = 0; i < str.length(); i++)
-	{
-		reconStr += recon[i] > 0.5f ? " " : "#";
-	}
-
-	std::cout << reconStr << std::endl;
-}
-
 int main()
 {
 	// config
-	int inputHeight = 4;
-	int inputWidth = 4;
-	int width = 10;
-	int height = 10;
-	float connectionRadius = 3.0f;
-	float inhibitionRadius = 4.0f;
-	float inhibitionThreshold = 4.0f;
+	int inputHeight = 10;
+	int inputWidth = 10;
+	int width = 20;
+	int height = 20;
+	float connectionRadius = 6.0f;
+	float inhibitionRadius = 6.0f;
 
 	std::mt19937 generator;
 	generator.seed(time(nullptr));
 
 	nlp::WTSDR wtsdr;
-	wtsdr.create(inputWidth, inputHeight, width, height, connectionRadius, inhibitionRadius, inhibitionThreshold, generator);
+	wtsdr.create(inputWidth, inputHeight, width, height, connectionRadius, inhibitionRadius, generator);
 
-	SDR sdr;
+	std::string input = "Machine learning is a scientific discipline that explores the construction and study of algorithms that can learn from data";
+	std::string input2 = "Machine learning can help solve practical problems found in everyday life";
+
+	std::vector<std::string> words;
+	std::vector<std::string> words2;
+
+	std::string sub = "";
+
+	for (int i = 0; i < input.length(); i++)
+	{
+		if (input[i] == ' ' || i == input.length() - 1)
+		{
+			if (i == input.length() - 1)
+				sub += input[i];
+
+			words.push_back(sub);
+			sub = "";
+			continue;
+		}
+
+		sub += input[i];
+	}
+	sub = "";
+
+	for (int i = 0; i < input2.length(); i++)
+	{
+		if (input2[i] == ' ' || i == input2.length() - 1)
+		{
+			if (i == input2.length() - 1)
+				sub += input2[i];
+
+			words2.push_back(sub);
+			sub = "";
+			continue;
+		}
+
+		sub += input2[i];
+	}
+
+	SDR sdr = wtsdr.learn(words, 0.05f, 0.1f, 0.001f, 0.2f, 300);
+
+	SDR sdr2 = wtsdr.learn(words2, 0.05f, 0.1f, 0.001f, 0.2f, 300);
 
 	vis::PrettySDR sdrRenderer;
 	sdrRenderer.create(width, height);
 
-	sf::RenderWindow window(sf::VideoMode(800, 600), "SDR Testing");
+	vis::PrettySDR sdrRenderer2;
+	sdrRenderer2.create(width, height);
+
+	vis::PrettySDR sdrRenderer3;
+	sdrRenderer3.create(width, height);
+
+	for (int i = 0; i < sdr._height; i++)
+	{
+		for (int j = 0; j < sdr._width; j++)
+		{
+			sdrRenderer[j + i * sdr._width] = sdr._states[j + i * sdr._width];
+		}
+	}
+
+	for (int i = 0; i < sdr2._height; i++)
+	{
+		for (int j = 0; j < sdr2._width; j++)
+		{
+			sdrRenderer2[j + i * sdr2._width] = sdr2._states[j + i * sdr2._width];
+		}
+	}
+
+	SDR overlap;
+	overlap._height = sdr._height;
+	overlap._width = sdr._width;
+
+	for (int i = 0; i < sdr._height; i++)
+	{
+		for (int j = 0; j < sdr._width; j++)
+		{
+			overlap._states.push_back(sdr._states[j + i * sdr._width] * sdr2._states[j + i * sdr._width]);
+			sdrRenderer3[j + i * sdr._width] = sdr._states[j + i * sdr._width] * sdr2._states[j + i * sdr._width];
+		}
+	}
+
+	std::string overlapStr = wtsdr.getStringFromSDR(overlap, 0.99f);
+
+	std::cout << "Overlap String: " << overlapStr << std::endl;
+
+	sf::RenderWindow window(sf::VideoMode(1600, 1000), "SDR Testing");
 
 	float timeStep = 1.0f / 60.0f * 1000.0f;
 	float timePassed = 0.0f;
@@ -138,6 +173,8 @@ int main()
 	{
 		window.clear();
 		sdrRenderer.draw(window, sf::Vector2f(10.0f, 10.0f));
+		sdrRenderer2.draw(window, sf::Vector2f(410.0f, 10.0f));
+		sdrRenderer3.draw(window, sf::Vector2f(225.0f, 410.0f));
 		window.display();
 
 		timePassed = 0.0f;
@@ -157,13 +194,6 @@ int main()
 			}
 
 			// update here
-			for (int i = 0; i < sdr._height; i++)
-			{
-				for (int j = 0; j < sdr._width; j++)
-				{
-					sdrRenderer[j + i * sdr._width] = sdr._states[j + i * sdr._width];
-				}
-			}
 
 			timePassed += deltaTime;
 

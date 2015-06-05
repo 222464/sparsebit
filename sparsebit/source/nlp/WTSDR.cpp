@@ -1,55 +1,76 @@
 #include "WTSDR.h"
-#include <unordered_map>
+#include <iostream>
 
-void nlp::WTSDR::create(int inputWidth, int inputHeight, int width, int height, float connectionRadius, float inhibitionRadius, float inhibitionThreshold, std::mt19937 &generator)
+void nlp::WTSDR::create(int inputWidth, int inputHeight, int width, int height, float connectionRadius, float inhibitionRadius, std::mt19937 &generator)
 {
-	_sdrt.create(inputWidth, inputHeight, width, height, connectionRadius, inhibitionRadius, inhibitionThreshold, generator);
+	_inputWidth = inputWidth;
+	_inputHeight = inputHeight;
+
+	_sdrt.create(_inputWidth, _inputHeight, width, height, connectionRadius, inhibitionRadius, generator, true);
 }
 
-SDR nlp::WTSDR::convertStringToSDR(const std::string &word, const std::string &definition)
+void nlp::WTSDR::emplaceWord(const std::string &word)
 {
-	std::vector<std::string> words;
-	std::vector<float> inputs;
+	bool contains = false;
 
-	std::string sub = "";
-
-	for (int i = 0; i < definition.length(); i++)
-	{
-		if (definition[i] == ' ' || definition[i] == '.' || definition[i] == '!' || definition[i] == '?' || definition[i] == ',' || definition[i] == ';' || definition[i] == '-')
+	for (int i = 0; i < _words.size(); i++)
+		if (_words[i] == word)
 		{
-			if (!sub.empty())
-				words.push_back(sub);
-
-			continue;
+			contains = true;
+			break;
 		}
 
-		sub += definition[i];
-	}
+	if (!contains)
+		_words.push_back(word);
+}
 
-	SDR wordDefSDR;
+std::vector<float> nlp::WTSDR::getVectorFromWords(const std::vector<std::string> &words)
+{
+	std::vector<float> vec(_inputWidth * _inputHeight, 0.0f);
 
 	for (int i = 0; i < words.size(); i++)
 	{
-		inputs.clear();
-
-		for (int j = 0; j < words[i].length(); j++)
+		for (int j = 0; i < _words.size(); j++)
 		{
-			inputs.push_back(static_cast<float>(words[i][j]));
+			if (_words[j] == words[i])
+			{
+				vec[j] = 1.0f;
+				break;
+			}
 		}
-
-		wordDefSDR = _sdrt.generateSDR(inputs);
 	}
 
-	inputs.clear();
-
-	for (int i = 0; i < word.length(); i++)
-	{
-		inputs.push_back(static_cast<float>(word[i]));
-	}
-
-	SDR wordSDR = _sdrt.generateSDR(inputs);
-
-	return wordSDR;
+	return vec;
 }
 
+SDR nlp::WTSDR::learn(const std::vector<std::string> &words, float weightLearnRate, float inhibitionLearnRate, float inhibitionBiasLearnRate, float sparsity, int numLearnSteps)
+{
+	for (int i = 0; i < words.size(); i++)
+		emplaceWord(words[i]);
 
+	std::vector<float> inputs = getVectorFromWords(words);
+
+	SDR sdr;
+	
+	for (int i = 0; i < numLearnSteps; i++)
+	{
+		sdr = _sdrt.generateSDR(inputs);
+
+		_sdrt.learn(inputs, sdr, weightLearnRate, inhibitionLearnRate, inhibitionBiasLearnRate, sparsity);
+	}
+
+	return sdr;
+}
+
+std::string nlp::WTSDR::getStringFromSDR(const SDR &sdr, float threshold)
+{
+	std::string str = "";
+
+	std::vector<float> inputs = _sdrt.reconstruct(sdr);
+
+	for (int i = 0; i < inputs.size(); i++)
+		if (inputs[i] > threshold)
+			str += _words[i] + " ";
+
+	return str;
+}

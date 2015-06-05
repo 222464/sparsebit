@@ -1,5 +1,9 @@
 #pragma once
 
+#include <unordered_map>
+#include <string>
+#include <vector>
+
 #include "SDRT.h"
 
 namespace nlp
@@ -7,11 +11,22 @@ namespace nlp
 	class WTSDR
 	{
 	private:
-		SDRT _sdrt;
+		int _inputWidth;
+		int _inputHeight;
+
+		std::vector<std::string> _words;
+
+		void emplaceWord(const std::string &word);
 
 	public:
-		void create(int inputWidth, int inputHeight, int width, int height, float connectionRadius, float inhibitionRadius, float inhibitionThreshold, std::mt19937 &generator);
+		SDRT _sdrt;
 
-		SDR convertStringToSDR(const std::string &word, const std::string &definition);
+		void create(int inputWidth, int inputHeight, int width, int height, float connectionRadius, float inhibitionRadius, std::mt19937 &generator);
+
+		std::vector<float> getVectorFromWords(const std::vector<std::string> &words);
+
+		SDR learn(const std::vector<std::string> &words, float weightLearnRate, float inhibitionLearnRate, float inhibitionBiasLearnRate, float sparsity, int numLearnSteps);
+
+		std::string getStringFromSDR(const SDR &sdr, float threshold);
 	};
 }
